@@ -6,9 +6,6 @@ import abc
 
 
 
-class Controller(pynput.keyboard.Controller):
-  def call(self, block):
-    return block(self)
 
 
 
@@ -33,7 +30,7 @@ class CharacterBlock(Block):
     self.chars = list(chars)
 
 
-  def __call__(self, controller:Controller):
+  def __call__(self, controller):
     for char in self.chars:
       controller.press(char)
     for char in self.chars[::-1]:
@@ -41,7 +38,7 @@ class CharacterBlock(Block):
 
 
   def __iter__(self):
-    return iter(self.contents)
+    return iter(self.chars)
 
 
   def __str__(self):
@@ -65,6 +62,34 @@ class CharacterBlock(Block):
   def issuperset(self, other):
     return set(self).issuperset(set(other))
 
+
+
+
+class PressCharacterBlock(CharacterBlock):
+  def __call__(self, controller):
+    for char in self.chars:
+      controller.press(char)
+
+
+
+
+  
+class ReleaseCharacterBlock(CharacterBlock):
+  def __call__(self, controller):
+    for char in self.chars:
+      controller.release(char)
+
+
+
+
+class CharacterBlockChain:
+  def __init__(self, *blocks):
+    self.blocks = list(blocks)
+
+
+  def __call__(self, controller):
+    for block in self.blocks:
+      block(controller)
   
 
   
@@ -80,26 +105,32 @@ class QuickConstruct:
     else:
       return pynput.keyboard.KeyCode.from_char(code)
 
-    
 
-
-class CharacterCollection:
-  def __init__(self, *characters):
-    self.contents = set(characters)
+  @staticmethod
+  def character_block(code):
+    return CharacterBlock(*[QuickConstruct.character(char) for char in code.split(' ')])
 
 
   @staticmethod
-  def quick_construct(*codes):
-    return CharacterCollection(*[Key.quick_construct(code) for code in codes])
+  def character_block_chain(code):
+    return CharacterBlockChain(*[CharacterBlock(*[QuickConstruct.character(char) for char in chunk.split(' ')]) for chunk in code.split('/')])
+
+
+
+
+
+class Controller(pynput.keyboard.Controller):
+  def call(self, block):
+    return block(self)
   
 
 
   
 
 class Shortcut:
-  def __init__(self, trigger:CharacterCollection, result):
+  def __init__(self, trigger, command):
     self.trigger = trigger
-    self.result = result
+    self.command = command
     self.suspended = False
 
 
@@ -116,7 +147,6 @@ class KeyboardListener(pynput.keyboard.Listener):
     
     
   def on_press(self, key):
-    print(key == pynput.keyboard.KeyCode.from_char('space'))
     self.target.add_pressed_thing(key)
 
 
@@ -158,20 +188,30 @@ class KeysPressedMonitor:
 
 
   def add_pressed_thing(self, thing):
+    print(thing)
     self.keys_pressed.add(thing)
-    print(self.keys_pressed)
+    for shortcut in self.shortcuts:
+      if not shortcut.suspended:
+        if shortcut.trigger.issubset(self.keys_pressed):
+          shortcut.command(self.controller)
+          shortcut.suspended = True
 
 
   def remove_pressed_thing(self, thing):
     self.keys_pressed.remove(thing)
+    for shortcut in self.shortcuts:
+      if shortcut.suspended:
+        if thing in shortcut.trigger:
+          shortcut.suspended = False
+          
 
 
 
 # Collect events until released
 keys_pressed_monitor = KeysPressedMonitor(
   Shortcut(
-    CharacterBlock(),
-    None
+    QuickConstruct.character_block('enter'),
+    QuickConstruct.character_block_chain('alt tab/ctrl n/ctrl l/d/o/c/s/./g/o/o/g/l/e/./c/o/m'),
   )
 )
 keys_pressed_monitor.start()
