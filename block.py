@@ -3,29 +3,31 @@ import time
 
 import pynput
 
+char_codes ={
+  'ralt': pynput.keyboard.Key.alt_r,
+  'lalt': pynput.keyboard.Key.alt_l,
+  'ctrlalt': pynput.keyboard.Key.alt_gr,
+  'cap': pynput.keyboard.Key.caps_lock,
+  'caps': pynput.keyboard.Key.caps_lock,
+  'rcmd': pynput.keyboard.Key.cmd_r,
+  'rctrl': pynput.keyboard.Key.ctrl_r,
+  'lctrl': pynput.keyboard.Key.ctrl_l,
+  'del': pynput.keyboard.Key.delete,
+  'pgdn': pynput.keyboard.Key.page_down,
+  'pgup': pynput.keyboard.Key.page_up,
+  'printscr': pynput.keyboard.Key.print_screen,
+  'rshift': pynput.keyboard.Key.shift_r,
+  '\n': pynput.keyboard.Key.enter,
+  ' ': pynput.keyboard.Key.space,
+}
 
-class Character(pynput.keyboard._win32.KeyCode):
-  keys = {
-    '\n': pynput.keyboard.Key.enter,
-    'rcmd': pynput.keyboard.Key.cmd_r,
-    'lcmd': pynput.keyboard.Key.cmd_l,
-    'rctrl': pynput.keyboard.Key.ctrl_r,
-    'lctrl': pynput.keyboard.Key.ctrl_l,
-    'ralt': pynput.keyboard.Key.alt_r,
-    'lalt': pynput.keyboard.Key.alt_l,
-    'ctrlalt': pynput.keyboard.Key.alt_gr,
-    'rshift': pynput.keyboard.Key.shift_r,
-  }
-
-
-  @classmethod
-  def from_string(cls, code:str=''):
-    if code in cls.keys:
-      return cls.keys[code]
-    elif code in pynput.keyboard.Key.__members__:
-      return pynput.keyboard.Key[code]
-    else:
-      return pynput.keyboard.KeyCode.from_char(code)
+def char(code):
+  if code in char_codes:
+    return char_codes[code]
+  elif code in pynput.keyboard.Key.__members__:
+    return pynput.keyboard.Key[code]
+  else:
+    return pynput.keyboard.KeyCode.from_char(code)
   
 
 class Block(abc.ABC):
@@ -53,28 +55,148 @@ class CharacterBlock(Block):
     self.chars = list(chars)
 
 
-  def __call__(self, keys_pressed_monitor):
-    for char in self.chars:
-      keys_pressed_monitor.keyboard_controller.press(char)
-    for char in self.chars[::-1]:
-      keys_pressed_monitor.keyboard_controller.release(char)
-
-
   def __iter__(self):
     return iter(self.chars)
 
 
   def __repr__(self):
-    return f'CharacterBlock({" ".join(map(str, self.chars))})'
+    return f'CharacterBlock({", ".join(map(str, self.chars))})'
+
+
+  def copy(self):
+    return self.__class__(*self.chars)
 
 
   @classmethod
   def from_string(cls, code=''):
-    '''character block contruct code should be characters separated by spaces'''
-    return cls(*[Character.from_string(char) for char in code.split()])
+    chars = []
+    for idx, frag in enumerate(code.split('`')):
+      if idx%2:
+        chars.append(char(frag))
+      else:
+        chars += [char(letter) for letter in frag]
+    return cls(*chars)
+
+
+class MultiPressBlock(CharacterBlock):
+  def __call__(self, monitor):
+    for char in self.chars:
+      monitor.keyboard_controller.press(char)
+
+
+  def __repr__(self):
+    return f'MultiPressBlock({", ".join(map(str, self.chars))})'
+
+
+class MultiReleaseBlock(CharacterBlock):
+  def __call__(self, monitor):
+    for char in self.chars:
+      monitor.keyboard_controller.release(char)
+
+
+  def __repr__(self):
+    return f'MultiReleaseBlock({", ".join(map(str, self.chars))})'
+        
+
+
+class MultiTapBlock(CharacterBlock):
+  def __call__(self, monitor):
+    for char in self.chars:
+      monitor.keyboard_controller.press(char)
+    for char in self.chars[::-1]:
+      monitor.keyboard_controller.release(char)
+
+
+  def __repr__(self):
+    return f'MultiTapBlock({", ".join(map(str, self.chars))})'
+
+
+def TypingBlock(CharacterBlock):
+  def __call__(self, monitor):
+    for char in self.chars:
+      monitor.tap(char)
+
+
+  def __repr__(self):
+    return f'TypingBlock({", ".join(map(str, self.chars))})'
+
+
+class CommandBlock(Block):
+  commands = {
+    'sleep': lambda monitor, seconds: time.sleep(float(seconds)),
+    'print': lambda monitor, *params: print(' '.join(params)),
+  }
+
+  
+  def __init__(self, command):
+    self.command = command
+
+
+  def __call__(self, monitor):
+    self.command(monitor)
+
+
+  def __repr__(self):
+    return f'CommandBlock({self.command})'
+
+
+  @classmethod
+  def from_string(cls, code):
+    key, *params = code.split('`')
+    func = cls.commands[key] if key in cls.commands else eval(key)
+    return cls(lambda monitor, params=params: func(monitor, *params))
+
+
+class QuitBlock(CommandBlock):
+  def __init__(self):
+    pass
+
+
+  def __call__(self, monitor):
+    monitor.stop()
+
+
+  def __repr__(self):
+    return f'QuitBlock()'
+
+
+  @classmethod
+  def from_string(cls, code):
+    return cls()
+
+
+class BlockChain:
+  def __init__(self, *blocks):
+    self.blocks = list(blocks)
+
+
+  def __call__(self, monitor):
+    for block in self.blocks:
+      block(monitor)
+
+
+  def __repr__(self):
+    return f'BlockChain({", ".join(map(str, self.blocks))})'
+
+
+#example blockchain construction code:
+# multitap``cmd`r|genericcommand`sleep`0.1|typing`chrome www.youtube.com/watch?v=dQw4w9WgXcQ`enter`
+
+  @classmethod
+  def from_string(cls, code=''):
+    blocks = []
+    for idx, frag in enumerate(code.split('|')):
+      blocktype, _, code = frag.partition('`')
+      blocks.append(block_names[blocktype].from_string(code))
+    return cls(*blocks)
+  
 
 
 class CharacterCollection(CharacterBlock):
+  def __call__(self, controler):
+    pass
+
+  
   def __lt__(self, other):
     return len(self.chars).__lt__(len(other.chars))
 
@@ -84,7 +206,7 @@ class CharacterCollection(CharacterBlock):
 
 
   def __repr__(self):
-    return f'CharacterCollection({" ".join(map(str, self.chars))})'
+    return f'CharacterCollection({", ".join(map(str, self.chars))})'
 
   
   def issubset(self, other):
@@ -99,91 +221,6 @@ class CharacterCollection(CharacterBlock):
   def remove(self, character):
     while character in self.chars:
       self.chars.remove(character)
-  
-
-class PressCharacterBlock(CharacterBlock):
-  def __call__(self, keys_pressed_monitor):
-    for char in self.chars:
-      keys_pressed_monitor.keyboard_controller.press(char)
-
-
-  def __repr__(self):
-    return f'PressCharacterBlock({" ".join(map(str, self.chars))})'
-
-  
-class ReleaseCharacterBlock(CharacterBlock):
-  def __call__(self, keys_pressed_monitor):
-    for char in self.chars:
-      keys_pressed_monitor.keyboard_controller.release(char)
-
-
-  def __repr__(self):
-    return f'ReleaseCharacterBlock({" ".join(map(str, self.chars))})'
-
-
-class CommandBlock(Block):
-  commands = {
-    'sleep': lambda keys_pressed_monitor, seconds: time.sleep(float(seconds)),
-    'print': lambda keys_pressed_monitor, *params: print(' '.join(params)),
-    'quit': lambda keys_pressed_monitor: keys_pressed_monitor.stop()
-  }
-  
-  def __init__(self, command):
-    self.command = command
-
-
-  def __call__(self, keys_pressed_monitor):
-    self.command(keys_pressed_monitor)
-
-
-  def __repr__(self):
-    return f'CommandBlock({self.command})'
-
-
-  @classmethod
-  def from_string(cls, code=''):
-    '''command block construct code should look like "command_name *arguments
-separated by spaces"'''
-    func_key, *params = code.split(' ')
-    if func_key in cls.commands:
-      func = cls.commands[func_key]
-    else:
-      func = eval(func_key)
-    return cls(
-      lambda keys_pressed_monitor, params=params: func(
-        keys_pressed_monitor, *params
-      )
-    )
-
-
-class BlockChain:
-  def __init__(self, *blocks):
-    self.blocks = list(blocks)
-
-
-  def __call__(self, keys_pressed_monitor):
-    for block in self.blocks:
-      block(keys_pressed_monitor)
-
-
-  def __repr__(self):
-    return f'BlockChain({" ".join(map(str, self.blocks))})'
-
-
-  @classmethod
-  def from_string(cls, code=''):
-    '''block chain construct code should consist of regular characters and block
-construction code separated by <>. Block construction code may start with a
-prefix in constr_def_prefixes to yield the corresponding type of object'''
-    blocks = []
-    for idx, frag in enumerate(code.replace('<','>').split('>')):
-      if not idx%2:
-        blocks += [CharacterBlock.from_string(letter) for letter in frag]
-      elif (split_frag := frag.split(' '))[0] in class_names:
-        blocks.append(class_names[split_frag[0]].from_string(' '.join(split_frag[1:])))
-      else:
-        blocks.append(CharacterBlock.from_string(frag))
-    return cls(*blocks)
 
 
 class Shortcut:
@@ -205,8 +242,8 @@ class Shortcut:
     return self.trigger.__gt__(other.trigger)
 
 
-  def __call__(self, keys_pressed_monitor):
-    return self.command(keys_pressed_monitor)
+  def __call__(self, monitor):
+    return self.command(monitor)
 
 
   def __repr__(self):
@@ -215,17 +252,7 @@ class Shortcut:
 
   def triggered_by(self, character_collection):
     return self.trigger.issubset(character_collection)
-
-
-  @classmethod
-  def from_string(cls, trigger_code, output_code):
-    '''trigger code should be character_block construction code, output_code should
-  be block_chain construction code'''
-    return cls(
-      CharacterCollection.from_string(trigger_code),
-      BlockChain.from_string(output_code)
-    )
-
+  
 
   def fits_pattern(self, suspended=None, triggered_by={}, contains=[], not_contains=[]):
     if suspended is not None and self.suspended != suspended:
@@ -240,6 +267,24 @@ class Shortcut:
       if character in self:
         return False
     return True
+
+
+  @classmethod
+  def from_strings(cls, trigger_code, output_code):
+    return cls(
+      CharacterCollection.from_string(trigger_code),
+      BlockChain.from_string(output_code)
+    )
+
+
+  @classmethod
+  def from_string(cls, code):
+    trigger_code, output_code = code.split('||')
+    return cls(
+      CharacterCollection.from_string(trigger_code),
+      BlockChain.from_string(output_code)
+    )
+
 
 
 class ShortcutCollection:
@@ -259,14 +304,23 @@ class ShortcutCollection:
     return ShortcutCollection(*[shortcut for shortcut in self.shortcuts if shortcut.fits_pattern(
       suspended=suspended, triggered_by=triggered_by, contains=contains, not_contains=not_contains
     )])
+
+
+  @classmethod
+  def from_string(cls, code):
+    shortcuts = [Shortcut.from_string(chunk) for chunk in code.split('|||')]
+    return cls(*shortcuts) 
   
 
-class_names = {
+block_names = {
   'block': Block,
-  'characters': CharacterBlock,
-  'press': PressCharacterBlock,
-  'release': ReleaseCharacterBlock,
+  'character': CharacterBlock,
+  'press': MultiPressBlock,
+  'release': MultiReleaseBlock,
+  'tap': MultiTapBlock,
+  'typing': TypingBlock,
   'command': CommandBlock,
-  'chain': BlockChain,
-  'shortcut': Shortcut
+  'quit': QuitBlock
 }
+
+
