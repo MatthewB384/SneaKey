@@ -31,9 +31,10 @@ class Character(pynput.keyboard._win32.KeyCode):
 class Block(abc.ABC):
   'An entity that can be placed in a chain and called when necessary'
 
+
   @abc.abstractmethod
   def __init__(self):
-    '''creates a new group of characters'''
+    '''creates a new block'''
 
 
   @abc.abstractmethod
@@ -63,7 +64,7 @@ class CharacterBlock(Block):
     return iter(self.chars)
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'CharacterBlock({" ".join(map(str, self.chars))})'
 
 
@@ -74,10 +75,6 @@ class CharacterBlock(Block):
 
 
 class CharacterCollection(CharacterBlock):
-  def __iter__(self):
-    return iter(self.chars)
-
-
   def __lt__(self, other):
     return len(self.chars).__lt__(len(other.chars))
 
@@ -86,7 +83,7 @@ class CharacterCollection(CharacterBlock):
     return len(self.chars).__gt__(len(other.chars))
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'CharacterCollection({" ".join(map(str, self.chars))})'
 
   
@@ -104,14 +101,13 @@ class CharacterCollection(CharacterBlock):
       self.chars.remove(character)
   
 
-
 class PressCharacterBlock(CharacterBlock):
   def __call__(self, keys_pressed_monitor):
     for char in self.chars:
       keys_pressed_monitor.keyboard_controller.press(char)
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'PressCharacterBlock({" ".join(map(str, self.chars))})'
 
   
@@ -121,7 +117,7 @@ class ReleaseCharacterBlock(CharacterBlock):
       keys_pressed_monitor.keyboard_controller.release(char)
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'ReleaseCharacterBlock({" ".join(map(str, self.chars))})'
 
 
@@ -140,7 +136,7 @@ class CommandBlock(Block):
     self.command(keys_pressed_monitor)
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'CommandBlock({self.command})'
 
 
@@ -170,7 +166,7 @@ class BlockChain:
       block(keys_pressed_monitor)
 
 
-  def __str__(self):
+  def __repr__(self):
     return f'BlockChain({" ".join(map(str, self.blocks))})'
 
 
@@ -198,7 +194,7 @@ class Shortcut:
 
 
   def __iter__(self):
-    return self.trigger.__iter__()
+    return iter(self.trigger)
     
 
   def __lt__(self, other):
@@ -211,10 +207,6 @@ class Shortcut:
 
   def __call__(self, keys_pressed_monitor):
     return self.command(keys_pressed_monitor)
-
-
-  def __str__(self):
-    return f'Shortcut(trigger={self.trigger}, command={self.command})'
 
 
   def __repr__(self):
