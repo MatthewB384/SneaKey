@@ -1,6 +1,6 @@
 #sneaky
 
-import pynput
+import pynput.keyboard
 
 import block
 
@@ -30,11 +30,7 @@ class KeyboardController(pynput.keyboard.Controller):
   def release_all(self):
     for key in self.keys_pressed.copy():
       self.release(key)
-
-
-class MouseController(pynput.keyboard.Controller):
-  pass
-
+  
 
 class KeyboardListener(pynput.keyboard.Listener):
   def __init__(self, target, **listener_init_args):
@@ -47,27 +43,11 @@ class KeyboardListener(pynput.keyboard.Listener):
     
     
   def on_press(self, key):
-    self.target.add_pressed_thing(key)
+    self.target.press_key(key)
 
 
   def on_release(self, key):
-    self.target.remove_pressed_thing(key)
-
-
-class MouseListener(pynput.mouse.Listener):
-  def __init__(self, target, **listener_init_args):
-    super().__init__(
-      on_click=self.on_click,
-      **listener_init_args,
-    )
-    self.target = target
-
-
-  def on_click(self, x, y, button, pressed):
-    if pressed:
-      self.target.add_pressed_thing(button)
-    else:
-      self.target.remove_pressed_thing(button)
+    self.target.unpress_key(key)
 
 
 class Monitor:
@@ -75,9 +55,7 @@ class Monitor:
     self.shortcut_collection = block.ShortcutCollection(*shortcuts)
     self.keys_pressed = block.CharacterCollection()
     self.keyboard_controller = KeyboardController()
-    self.mouse_controller = MouseController()
     self.keyboard_listener = KeyboardListener(self)
-    self.mouse_listener = MouseListener(self)
     self.running = False
 
 
@@ -94,13 +72,11 @@ class Monitor:
 
   def start(self):
     self.keyboard_listener.start()
-    self.mouse_listener.start()
     self.running = True
 
 
   def stop(self):
     self.keyboard_listener.stop()
-    self.mouse_listener.stop()
     self.running = False
 
 
@@ -111,11 +87,11 @@ class Monitor:
     )
 
 
-  def add_pressed_thing(self, thing):
+  def press_key(self, thing):
     self.keys_pressed.add(thing)
 
 
-  def remove_pressed_thing(self, thing):
+  def unpress_key(self, thing):
     triggered = self.get_shortcuts(triggered=True)
     
     executable = triggered.get_shortcuts(suspended=False, contains=[thing])
@@ -139,4 +115,3 @@ class Monitor:
   def from_file(cls, file_name):
     with open(file_name) as file:
       return cls.from_string(file.read())
-          

@@ -1,7 +1,7 @@
 import abc
 import time
 
-import pynput
+import pynput.keyboard
 
 char_codes ={
   'ralt': pynput.keyboard.Key.alt_r,
@@ -322,5 +322,3 @@ block_names = {
   'command': CommandBlock,
   'quit': QuitBlock
 }
-
-
